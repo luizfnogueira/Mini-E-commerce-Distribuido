@@ -52,7 +52,7 @@ public class ServiceHealthRegistry {
         public void markFailure() {
             MutableStatus state = STATE.get(name);
             state.failures++;
-            if (state.failures > 2) {
+            if (state.failures >= 2) {
                 state.available = false;
             }
         }

@@ -5,6 +5,7 @@ import com.example.users.dto.LoginResponse;
 import com.example.users.dto.RegisterRequest;
 import com.example.users.dto.UserResponse;
 import com.example.users.repository.UserRepository;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -79,8 +80,18 @@ public class UserController {
     public ResponseEntity<?> profile(
             @PathVariable long id,
             @RequestHeader(value = "X-User-Id", required = false) String authenticatedUserId,
-            @RequestHeader(value = "X-User-Role", required = false) String authenticatedRole
+            @RequestHeader(value = "X-User-Role", required = false) String authenticatedRole,
+            @RequestHeader(value = "Authorization", required = false) String authorization
     ) throws Exception {
+        if (authenticatedUserId == null || authenticatedRole == null) {
+            Claims claims = validateToken(authorization);
+            if (claims == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "token invalido ou ausente"));
+            }
+            authenticatedUserId = String.valueOf(claims.get("userId"));
+            authenticatedRole = claims.get("role", String.class);
+        }
+
         if (!"admin".equals(authenticatedRole) && !String.valueOf(id).equals(authenticatedUserId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "acesso negado"));
         }
@@ -97,5 +108,20 @@ public class UserController {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private Claims validateToken(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return null;
+        }
+        try {
+            return Jwts.parser()
+                    .verifyWith(jwtKey)
+                    .build()
+                    .parseSignedClaims(authorization.substring(7))
+                    .getPayload();
+        } catch (Exception error) {
+            return null;
+        }
     }
 }

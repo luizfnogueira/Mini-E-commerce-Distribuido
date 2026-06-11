@@ -2,6 +2,10 @@ package com.example.products.controller;
 
 import com.example.products.dto.ProductRequest;
 import com.example.products.repository.ProductRepository;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,23 +15,31 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.crypto.SecretKey;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RestController
 public class ProductController {
     private final ProductRepository repository;
+    private final SecretKey jwtKey;
 
-    public ProductController(ProductRepository repository) {
+    public ProductController(ProductRepository repository, @Value("${jwt.secret}") String secret) {
         this.repository = repository;
+        this.jwtKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
     @PostMapping("/products")
     public ResponseEntity<?> create(
             @RequestBody ProductRequest request,
-            @RequestHeader(value = "X-User-Role", required = false) String role
+            @RequestHeader(value = "Authorization", required = false) String authorization
     ) throws Exception {
-        if (!"admin".equals(role)) {
+        Claims claims = validateToken(authorization);
+        if (claims == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "token invalido ou ausente"));
+        }
+        if (!"admin".equals(claims.get("role", String.class))) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "apenas admin pode criar produtos"));
         }
         if (request.name() == null || request.name().isBlank() || request.price() == null || request.price().compareTo(BigDecimal.ZERO) < 0) {
@@ -52,5 +64,20 @@ public class ProductController {
     @GetMapping("/health")
     public Map<String, String> health() {
         return Map.of("status", "ok");
+    }
+
+    private Claims validateToken(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return null;
+        }
+        try {
+            return Jwts.parser()
+                    .verifyWith(jwtKey)
+                    .build()
+                    .parseSignedClaims(authorization.substring(7))
+                    .getPayload();
+        } catch (Exception error) {
+            return null;
+        }
     }
 }

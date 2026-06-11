@@ -95,8 +95,10 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:5000/products" `
 ### 4. Listar produtos
 
 ```powershell
-Invoke-RestMethod -Method Get -Uri "http://localhost:5000/products" -Headers $headers
+Invoke-RestMethod -Method Get -Uri "http://localhost:5000/products"
 ```
+
+As leituras de produtos (`GET /products` e `GET /products/{id}`) sao publicas, conforme a especificacao. O servico alterna as leituras entre `products_1.db` e `products_2.db` por round-robin.
 
 ### 5. Criar pedido
 
@@ -121,4 +123,6 @@ Cada microsservico tem:
 GET /health -> {"status":"ok"}
 ```
 
-O Gateway consulta os healthchecks a cada 5 segundos. Se um servico falhar mais de 2 vezes, o Gateway registra erro no log e retorna `503 Service Unavailable` para rotas daquele servico. Quando voltar, registra recuperacao.
+O Gateway consulta os healthchecks a cada 5 segundos. Se um servico falhar em 2 tentativas, o Gateway registra erro no log e retorna `503 Service Unavailable` com mensagem JSON clara para rotas daquele servico. Quando voltar, registra recuperacao.
+
+Os endpoints protegidos validam JWT. O Gateway tambem valida o token e repassa `Authorization` aos microsservicos internos; assim, chamadas diretas aos servicos nao conseguem burlar permissao apenas enviando headers falsos.

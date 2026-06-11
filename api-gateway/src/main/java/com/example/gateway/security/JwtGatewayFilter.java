@@ -10,6 +10,7 @@ import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
@@ -35,10 +36,14 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
 
         if (service != null && !healthRegistry.isAvailable(service)) {
             exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
-            return exchange.getResponse().setComplete();
+            exchange.getResponse().getHeaders().set(HttpHeaders.CONTENT_TYPE, "application/json");
+            byte[] body = ("{\"error\":\"Servico " + service + " indisponivel\"}").getBytes(StandardCharsets.UTF_8);
+            DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(body);
+            return exchange.getResponse().writeWith(Mono.just(buffer));
         }
 
-        if (isPublicRoute(path)) {
+        String method = exchange.getRequest().getMethod().name();
+        if (isPublicRoute(path, method)) {
             return chain.filter(exchange);
         }
 
@@ -56,7 +61,7 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
                     .getPayload();
 
             String role = claims.get("role", String.class);
-            if (path.equals("/products") && "POST".equals(exchange.getRequest().getMethod().name()) && !"admin".equals(role)) {
+            if (path.equals("/products") && "POST".equals(method) && !"admin".equals(role)) {
                 exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
                 return exchange.getResponse().setComplete();
             }
@@ -79,8 +84,10 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
         return -1;
     }
 
-    private boolean isPublicRoute(String path) {
-        return path.equals("/users/register") || path.equals("/users/login");
+    private boolean isPublicRoute(String path, String method) {
+        return path.equals("/users/register")
+                || path.equals("/users/login")
+                || ("GET".equals(method) && (path.equals("/products") || path.startsWith("/products/")));
     }
 
     private String serviceForPath(String path) {
