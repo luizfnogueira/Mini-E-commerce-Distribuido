@@ -1,19 +1,19 @@
 # Mini E-commerce Distribuido - Execucao
 
--- Requisitos
+## Requisitos
 
 - Java 17 ou superior
 - Maven 3.8 ou superior
 - Portas livres: 5000, 5001, 5002 e 5003
 
--- Estrutura
+## Estrutura
 
 - `api-gateway`: API Gateway na porta 5000
 - `users-service`: usuarios na porta 5001
 - `products-service`: produtos na porta 5002, com duas replicas SQLite (`products_1.db` e `products_2.db`)
 - `orders-service`: pedidos na porta 5003
 
--- Compilar
+## Compilar
 
 Execute na raiz do projeto:
 
@@ -24,9 +24,15 @@ mvn -q -DskipTests package -f orders-service/pom.xml
 mvn -q -DskipTests package -f api-gateway/pom.xml
 ```
 
--- Rodar os servicos
+## Rodar os servicos
 
-Abra quatro terminais, um para cada comando:
+Antes de subir tudo de novo, encerre qualquer execucao anterior:
+
+```powershell
+.\stop-all.ps1
+```
+
+Em seguida, abra quatro terminais, um para cada comando:
 
 ```powershell
 java -jar users-service/target/users-service-0.0.1-SNAPSHOT.jar
@@ -53,7 +59,7 @@ O ponto de entrada para o cliente e sempre o Gateway:
 http://localhost:5000
 ```
 
--- Chave JWT
+## Chave JWT
 
 Todos os servicos usam a chave padrao abaixo se a variavel de ambiente `JWT_SECRET` nao for definida:
 
@@ -63,7 +69,20 @@ mini-ecommerce-secret-key-with-at-least-32-chars
 
 Para usar outra chave, defina a mesma variavel em todos os processos antes de iniciar.
 
--- Teste manual com PowerShell
+## Teste manual com PowerShell
+
+Use `Invoke-RestMethod` ou `curl.exe`. Nao abra as rotas `POST` no navegador, porque o browser faz requisicao `GET` sem corpo JSON e isso gera erro `400` ou a tela `Whitelabel Error Page`.
+
+Rotas importantes:
+
+- `POST /users/register`
+- `POST /users/login`
+- `GET /users/{id}`
+- `GET /products`
+- `GET /products/{id}`
+- `POST /products`
+- `POST /orders`
+- `GET /orders/{userId}`
 
 ### 1. Registrar admin
 
@@ -115,7 +134,7 @@ Invoke-RestMethod -Method Post -Uri "http://localhost:5000/orders" `
 Invoke-RestMethod -Method Get -Uri "http://localhost:5000/orders/1" -Headers $headers
 ```
 
--- Healthcheck e heartbeat
+## Healthcheck e heartbeat
 
 Cada microsservico tem:
 
@@ -126,3 +145,23 @@ GET /health -> {"status":"ok"}
 O Gateway consulta os healthchecks a cada 5 segundos. Se um servico falhar em 2 tentativas, o Gateway registra erro no log e retorna `503 Service Unavailable` com mensagem JSON clara para rotas daquele servico. Quando voltar, registra recuperacao.
 
 Os endpoints protegidos validam JWT. O Gateway tambem valida o token e repassa `Authorization` aos microsservicos internos; assim, chamadas diretas aos servicos nao conseguem burlar permissao apenas enviando headers falsos.
+
+## Encerramento
+
+Para parar tudo ao final dos testes:
+
+```powershell
+.\stop-all.ps1
+```
+
+Se quiser verificar quais processos Java ainda estao ocupando as portas do projeto:
+
+```powershell
+Get-NetTCPConnection -LocalPort 5000,5001,5002,5003
+```
+
+## Erros comuns
+
+- `Whitelabel Error Page` em `/users/register` ou `/users/login`: normalmente significa que a rota foi aberta no navegador em vez de ser chamada com `POST` e JSON.
+- `http://localhost:5000/orders` no navegador: nao existe `GET /orders`. Use `POST /orders` para criar pedido ou `GET /orders/{userId}` para listar.
+- `Port already in use`: encerre a execucao anterior com `.\stop-all.ps1` e suba novamente.
